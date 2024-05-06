@@ -1,7 +1,7 @@
 ;
 ;adapted from Jonathan Levinkind, 2018
 ;
-breed [animals animal]
+breed [dogs dog]
 breed [sheeps sheep]
 globals
 [
@@ -17,7 +17,12 @@ globals
   count-notsheep
 ]
 
-animals-own
+sheeps-own
+[
+  prevMove
+]
+
+dogs-own
 [
   chromosome ;; this is a list of 4 lists each containing list-pairs of:
              ;; one of 4 actions (encoded from 0 to 3)
@@ -39,6 +44,7 @@ to setup
   reset-ticks
   set currentGeneration 0
 
+
   ;;these are defined by the design (agents can move/rotate, and can encounter 4 types of space so 16 states. 4 * 16 * 2 -> 128
   set no-agent-actions 4
   set no-agent-states 16
@@ -47,17 +53,20 @@ to setup
   set lineList (list (random min-pycor) (random min-pycor) (random max-pycor) (random max-pycor)) ;; used to create rows sheep placement
   if walls-on [setup-walls]
   create-sheeps sheepPop [setup-sheep]
-  create-animals population [setup-animals]
+  create-dogs population [setup-dogs]
 
 
 end
 
 to setup-walls
     ask patches
-  [ if pxcor = max-pxcor or pxcor = min-pxcor
+  [
+    set pcolor green
+    if pxcor = max-pxcor or pxcor = min-pxcor
     [ set pcolor white ]
     if pycor = max-pycor or pycor = min-pycor
     [set pcolor white]
+
   ]
 end
 
@@ -66,7 +75,7 @@ to setup-sheep
   set color white
   setxy 0 0
   set heading random 360
-
+  set prevMove 0
   setxy random-pxcor random-pycor
   while [any? other turtles-here or pcolor = white]
   [
@@ -76,11 +85,11 @@ to setup-sheep
 
 end
 
-to setup-animals
+to setup-dogs
   set generation currentGeneration
   set size 1
-  set color yellow
-  set heading 90 * (random 4)
+  set shape "wolf"
+  set color black
   set points 0
   set notpoints 0
 
@@ -110,7 +119,7 @@ end
 to go
   if ticks < cycleTime
   [
-    tick-animals
+    tick-dogs
     tick-sheeps
     tick
   ]
@@ -129,7 +138,7 @@ end
 
 to endOfCycle
   let sumFitness 0
-  ask animals [set sumFitness (sumFitness + points)]
+  ask dogs [set sumFitness (sumFitness + points)]
   set averageFitness (sumFitness / population)
   print "Average Fitness: "
   print averageFitness
@@ -142,21 +151,21 @@ to hatchNextGeneration
   if currentGeneration = 10 or currentGeneration = 50 [
     let sheepall-count 0
     let notsheep-count 0
-    let countanimals 0
-    ask animals [
+    let countdogs 0
+    ask dogs [
       set sheepall-count (sheepall-count + points)
       set notsheep-count (notsheep-count + notpoints)
-      set countanimals (countanimals + 1)
+      set countdogs (countdogs + 1)
     ]
     print "The values for the generation "
     print (currentGeneration)
     print sheepall-count
     print notsheep-count
-    print countanimals
+    print countdogs
   ]
 
 
-  let tempSet (animals with [generation = currentGeneration])
+  let tempSet (dogs with [generation = currentGeneration])
 
   set currentGeneration (currentGeneration + 1)
 
@@ -169,16 +178,16 @@ to hatchNextGeneration
 
   if averageFitness = 0 [ set averageFitness 1]
 
-  while[ count animals < (population * 2)]
+  while[ count dogs < (population * 2)]
   [
     ask tempSet
     [
-      if count animals < (population * 2)
+      if count dogs < (population * 2)
       [
 
         if (points / averageFitness) > random-float 1
         [
-          hatch-animals 1 [setup-animals]
+          hatch-dogs 1 [setup-dogs]
         ]
       ]
     ]
@@ -217,7 +226,7 @@ end
 
 
 to crossOver
-  let tempSet (animals with [generation = currentGeneration])
+  let tempSet (dogs with [generation = currentGeneration])
 
   while[0.8 > random-float 1]
   [
@@ -273,75 +282,141 @@ end
 to tick-sheeps
   ask sheeps
   [
-  fd 1
-    let ahead look-here
-  bk 1
 
+    let surrounding-tiles neighbors4 with [pcolor != white]  ; Adjust the condition as needed
 
+    let nextPatch moveSheep
+
+    set prevMove calculate-direction patch-here nextPatch
+
+    move-to nextPatch
   ]
 end
 
-to tick-animals
-  ask animals
+
+to-report moveSheep
+
+  let surrounding-tiles neighbors4  ; Adjust the condition as needed
+  let current-tile patch-here
+  let no-dogs surrounding-tiles with [count dogs-here = 0]
+  let no-sheep surrounding-tiles with [count sheeps-here = 0]
+
+  ; 1. If there is a dog in your current patch, move, if possible, to a patch without a dog;
+  if count dogs-here > 0 [
+    if count no-dogs > 0 [
+      report one-of no-dogs
+    ]
+  ]
+  ; 2. If there is a dog in any of the four adjacent patches (i.e. North, South, East or West of the current one), move,
+  ; if possible, to an adjacent patch that does not contain a dog;
+  if count no-dogs > 0 [
+    report one-of no-dogs
+  ]
+
+  ; Move to a patch with no sheep, but which is adjacent to a patch with sheep;
+  if count no-sheep > 0 [
+
+    foreach shuffle sort no-sheep [ x ->
+      let options ([neighbors4] of x) with [count sheeps-here > 0 and self != current-tile]
+      print options
+      if count options > 0[
+        report x
+      ]
+    ]
+
+    foreach shuffle sort no-sheep [ x ->
+      if ([count sheeps-here] of x) < (count sheeps-here) [
+        report x
+      ]
+    ]
+
+  ]
+
+;   Make a stochastic choice of action as follows: choose the same action as the last one with 50% probability,
+;   or choose one of the remaining four actions, each with 12.5% probability. For the first move, assume for all sheep
+;   that their previous move was to stay put.
+
+  let options (list 0 1 2 3 4 prevMove prevMove prevMove)
+
+  let newMove one-of options
+
+  let newPositions filter [x -> calculate-direction current-tile x = newMove] sort surrounding-tiles
+
+  if length newPositions > 0 [
+    report item 0 newPositions
+  ]
+
+  report current-tile
+
+
+end
+
+to-report calculate-direction [prevPatch newPatch]
+
+  if [pxcor] of prevPatch > ([pxcor] of newPatch) [
+    report 1
+  ]
+  if [pxcor] of prevPatch < ([pxcor] of newPatch) [
+    report 2
+  ]
+  if [pycor] of prevPatch > ([pycor] of newPatch) [
+    report 3
+  ]
+  if [pycor] of prevPatch < ([pycor] of newPatch) [
+    report 4
+  ]
+
+end
+
+to randomMove
+  let option (list 0 1 2 3 4)
+
+  move one-of option
+end
+
+to move [i]
+  if i = 1 [moveNorth]
+  if i = 2 [moveEast]
+  if i = 3 [moveSouth]
+  if i = 4 [moveWest]
+end
+
+to tick-dogs
+  ask dogs
   [
-    action
+    randomMove
   ]
 end
 
 to action
 
-  ;; what is infront of you?
-  fd 1
-  let ahead look-here
-  bk 1
-
-  ;;pair-value for what is infront of you and what state you are in
-  ;; gets correct point in the chromosome list
-  let state item ((ahead * no-agent-states) + currentState) chromosome
-
-  let move (item 0 state)
-  let newState (item 1 state)
-
-  ifelse move = 0 [ moveFwd ]
-[ ifelse move = 1 [ moveBkwd ]
-[ ifelse move = 2 [ rotateLeft ]
-[ ifelse move = 3 [ rotateRight]
-[ ;; default case
-  ]]]]
-
-  set currentState newState
 end
 
 to-report look-here
 
-  ifelse count animals-here > 0 [report 1]
-  [ ifelse count sheeps-here > 1 [report 2]
+  ifelse count dogs-here > 0 [report 1]
+  [ ifelse count sheeps-here > 1 [report 2] ; this is because the count includes the current sheep... need to make version of this just for sheep and just for dogs
   [ ifelse pcolor = white [report 3]
   [ ifelse pcolor = black [report 0]
   [ ;; default case
   ]]]]
  end
 
-to moveFwd
-  fd 1
-  checkForsheep
-  if count animals-here > 1 [bk 1]
-  if pcolor = white [bk 1]
+to moveEast
+  set xcor xcor + 1
 end
 
-to rotateLeft
-  lt 90
+to moveWest
+  set xcor xcor - 1
 end
 
-to rotateRight
-  rt 90
+to moveSouth
+
+  set ycor ycor - 1
 end
 
-to moveBkwd
-  bk 1
-  checkForsheep
-  if count animals-here > 1 [fd 1]
-  if pcolor = white [fd 1]
+to moveNorth
+  set ycor ycor + 1
 end
 
 to checkForsheep
@@ -360,10 +435,10 @@ to checkForsheep
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+203
 10
-491
-292
+744
+552
 -1
 -1
 13.0
@@ -376,10 +451,10 @@ GRAPHICS-WINDOW
 1
 1
 1
--10
-10
--10
-10
+-20
+20
+-20
+20
 0
 0
 1
@@ -395,7 +470,7 @@ population
 population
 2
 50
-4.0
+26.0
 1
 1
 NIL
@@ -446,10 +521,10 @@ foodSpawnPattern
 0
 
 MONITOR
-654
-12
-728
-57
+753
+10
+908
+55
 Generation
 currentGeneration
 17
@@ -465,7 +540,7 @@ cycleTime
 cycleTime
 1000
 10000
-4000.0
+3000.0
 1000
 1
 NIL
@@ -480,16 +555,16 @@ mutationChance
 mutationChance
 0
 0.25
-0.02
+0.25
 0.01
 1
 NIL
 HORIZONTAL
 
 MONITOR
-654
+755
 62
-802
+903
 107
 Highest Average Fitness
 highest-avg-fitness
@@ -498,10 +573,10 @@ highest-avg-fitness
 11
 
 MONITOR
-655
-113
-809
-158
+753
+123
+907
+168
 Highest Individual Score
 highest-individual-score
 17
@@ -527,8 +602,8 @@ SLIDER
 sheepPop
 sheepPop
 0
-100
-11.0
+200
+194.0
 1
 1
 NIL

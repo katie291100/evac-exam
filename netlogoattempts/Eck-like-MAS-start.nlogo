@@ -8,8 +8,8 @@ globals
   currentGeneration
   averageFitness
   lineList
-  highest-avg-fitness
-  highest-individual-score
+  lowest-avg-fitness
+  lowest-individual-score
   no-agent-actions
   no-agent-states
   chromosome-length
@@ -32,6 +32,10 @@ dogs-own
   points ;; how much sheep have they eaten this cycle
   generation ;; what generation they are from
   notpoints
+  prevMove
+  influencedSheep
+  nearby
+  dirCentre
 ]
 
 
@@ -43,11 +47,12 @@ to setup
   clear-all
   reset-ticks
   set currentGeneration 0
-
+  set lowest-individual-score 100000000
+  set lowest-avg-fitness 100000000
 
   ;;these are defined by the design (agents can move/rotate, and can encounter 4 types of space so 16 states. 4 * 16 * 2 -> 128
-  set no-agent-actions 4
-  set no-agent-states 16
+  set no-agent-actions 5
+  set no-agent-states 25
   set chromosome-length (no-agent-actions * no-agent-states)
 
   set lineList (list (random min-pycor) (random min-pycor) (random max-pycor) (random max-pycor)) ;; used to create rows sheep placement
@@ -74,10 +79,12 @@ to setup-sheep
   set shape "sheep"
   set color white
   setxy 0 0
-  set heading random 360
+  set heading 0
+
+
   set prevMove 0
   setxy random-pxcor random-pycor
-  while [any? other turtles-here or pcolor = white]
+  while [pcolor = white]
   [
     set heading random 360
     fd 1
@@ -90,10 +97,10 @@ to setup-dogs
   set size 1
   set shape "wolf"
   set color black
-  set points 0
-  set notpoints 0
+  set points 1000000
+  setxy random-pxcor random-pycor
 
-  while [any? other turtles-here or pcolor = white]
+  while [ pcolor = white]
   [
     setxy random-pxcor random-pycor
   ]
@@ -119,8 +126,9 @@ end
 to go
   if ticks < cycleTime
   [
-    tick-dogs
     tick-sheeps
+    tick-dogs
+
     tick
   ]
 ;; once we reach cycleTime ticks we move to the next generation
@@ -137,32 +145,37 @@ end
 ;;;;;;;;;;;;;;;;;;;;;
 
 to endOfCycle
+
+  let meanX mean [pxcor] of sheeps
+  let meanY mean [pycor] of sheeps
+
   let sumFitness 0
-  ask dogs [set sumFitness (sumFitness + points)]
+  ask dogs [set points checkFitness influencedSheep meanX meanY]
+  ask dogs [set sumFitness (sumFitness + points  )]
   set averageFitness (sumFitness / population)
   print "Average Fitness: "
   print averageFitness
-  if averageFitness > highest-avg-fitness [set highest-avg-fitness averageFitness]
+  if averageFitness < lowest-avg-fitness [set lowest-avg-fitness averageFitness]
   hatchNextGeneration
 end
 
 to hatchNextGeneration
 
-  if currentGeneration = 10 or currentGeneration = 50 [
-    let sheepall-count 0
-    let notsheep-count 0
-    let countdogs 0
-    ask dogs [
-      set sheepall-count (sheepall-count + points)
-      set notsheep-count (notsheep-count + notpoints)
-      set countdogs (countdogs + 1)
-    ]
-    print "The values for the generation "
-    print (currentGeneration)
-    print sheepall-count
-    print notsheep-count
-    print countdogs
-  ]
+;  if currentGeneration = 10 or currentGeneration = 50 [
+;    let sheepall-count 0
+;    let notsheep-count 0
+;    let countdogs 0
+;    ask dogs [
+;      set sheepall-count (sheepall-count + points)
+;      set notsheep-count (notsheep-count + notpoints)
+;      set countdogs (countdogs + 1)
+;    ]
+;    print "The values for the generation "
+;    print (currentGeneration)
+;    print sheepall-count
+;    print notsheep-count
+;    print countdogs
+;  ]
 
 
   let tempSet (dogs with [generation = currentGeneration])
@@ -172,20 +185,23 @@ to hatchNextGeneration
 
   ask tempSet
   [
-    if points > highest-individual-score [set highest-individual-score points]
-    if averageFitness = 0 [set points 1]
+    if points < lowest-individual-score [set lowest-individual-score points]
+
   ]
 
-  if averageFitness = 0 [ set averageFitness 1]
+
 
   while[ count dogs < (population * 2)]
   [
+
+
     ask tempSet
     [
       if count dogs < (population * 2)
       [
+        if points  = 0 [set points 1000000]
 
-        if (points / averageFitness) > random-float 1
+        if (points / averageFitness) > random-float 2
         [
           hatch-dogs 1 [setup-dogs]
         ]
@@ -194,7 +210,7 @@ to hatchNextGeneration
   ]
   ask tempSet [die]
   ask sheeps [die]
-  create-sheeps (round (world-width * world-height * 0.04)) [setup-sheep]
+  create-sheeps sheepPop [setup-sheep]
 
   crossOver
 end
@@ -296,7 +312,7 @@ end
 
 to-report moveSheep
 
-  let surrounding-tiles neighbors4  ; Adjust the condition as needed
+  let surrounding-tiles neighbors4 with [pcolor != white] ; Adjust the condition as needed
   let current-tile patch-here
   let no-dogs surrounding-tiles with [count dogs-here = 0]
   let no-sheep surrounding-tiles with [count sheeps-here = 0]
@@ -318,7 +334,7 @@ to-report moveSheep
 
     foreach shuffle sort no-sheep [ x ->
       let options ([neighbors4] of x) with [count sheeps-here > 0 and self != current-tile]
-      print options
+
       if count options > 0[
         report x
       ]
@@ -365,7 +381,7 @@ to-report calculate-direction [prevPatch newPatch]
   if [pycor] of prevPatch < ([pycor] of newPatch) [
     report 4
   ]
-
+  report 0
 end
 
 to randomMove
@@ -384,11 +400,77 @@ end
 to tick-dogs
   ask dogs
   [
-    randomMove
+    action
+
+
+
   ]
 end
 
 to action
+
+
+
+  ;;pair-value for what is infront of you and what state you are in
+  ;; gets correct point in the chromosome list
+  let state item ((dirCentre * no-agent-states) + currentState) chromosome
+
+;  print state
+;  print ((dirCentre * no-agent-states) + currentState)
+;
+
+  let moveDir (item 0 state)
+  let newState (item 1 state)
+
+
+  if moveDir = 0 [  ]
+  if moveDir = 1 [ moveNorth ]
+  if moveDir = 2 [ moveEast ]
+  if moveDir = 3 [ moveSouth]
+  if moveDir = 4 [ moveWest]
+
+  let meanX mean [pxcor] of sheeps
+  let meanY mean [pycor] of sheeps
+
+  ifelse patch-here = patch meanX meanY [
+    set dirCentre 1
+  ][
+
+  set currentState newState
+;  let nearbySheep sort [sheeps-here] of neighbors4
+;  ifelse (count sheeps in-cone 4 1) > 1 [
+;    set nearby 3
+;  ][
+;  ifelse (count dogs in-cone 4 1) > 1 [
+;    set nearby 1
+;  ]
+;   [ ifelse (any? patches in-cone 4 1 with [pcolor = white])[
+;      set nearby 2
+;      ]
+;    [
+;    set nearby 0
+;  ]]]
+  let angleToMean towards patch meanX meanY
+
+  if angleToMean < 45 or angleToMean > 315 [
+    set pcolor red
+    set dirCentre 0
+  ]
+  if angleToMean < 135 and angleToMean > 45 [
+    set pcolor blue
+    set dirCentre 2
+  ]
+  if angleToMean < 225 and angleToMean > 135 [
+    set pcolor yellow
+    set dirCentre 3
+  ]
+  if angleToMean < 315 and angleToMean > 225 [
+      set pcolor pink
+    set dirCentre 4
+  ]
+  ]
+  set influencedSheep sentence influencedSheep  (reduce sentence [sort sheeps-here] of neighbors4)
+
 
 end
 
@@ -403,42 +485,65 @@ to-report look-here
  end
 
 to moveEast
-  set xcor xcor + 1
+  if ([pcolor] of patch (xcor + 1) ycor) != white [
+    set xcor xcor + 1
+    set heading 90
+  ]
 end
 
 to moveWest
-  set xcor xcor - 1
+  if ([pcolor] of patch (xcor - 1) ycor) != white [
+    set xcor xcor - 1
+    set heading 270
+  ]
 end
 
 to moveSouth
-
-  set ycor ycor - 1
+  if ([pcolor] of patch xcor (ycor - 1)) != white [
+    set ycor ycor - 1
+    set heading 180
+  ]
 end
 
 to moveNorth
-  set ycor ycor + 1
+  if ([pcolor] of patch xcor (ycor + 1)) != white [
+    set ycor ycor + 1
+    set heading 0
+  ]
 end
 
-to checkForsheep
-  ifelse count sheeps-here > 0
-  [
-    set points (points + 1)
-    ask sheeps-here [die]
-    hatch-sheeps 1 [setup-sheep]
-    set count-sheep-all (count-sheep-all + 1)
+to-report checkFitness [sheepInput meanXIn meanYIn]
 
+  let sheep-set turtles with [member? self sheepInput]
+
+  let x-coordinates [xcor] of sheep-set
+  let y-coordinates [ycor] of sheep-set
+  let n count sheep-set
+
+  let squared-diff-sum-x sum map [x -> (x - meanXIn) ^ 2] x-coordinates
+
+
+  let squared-diff-sum-y sum map [y -> (y - meanYIn) ^ 2] y-coordinates
+
+
+  let total-variance squared-diff-sum-x + squared-diff-sum-y
+
+
+
+  if n = 0 [
+    report 0
   ]
-  [
-    set notpoints (notpoints + 1)
-  ]
+
+  report total-variance / n
+
 
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
 203
 10
-744
-552
+484
+292
 -1
 -1
 13.0
@@ -448,13 +553,13 @@ GRAPHICS-WINDOW
 1
 1
 0
+0
+0
 1
-1
-1
--20
-20
--20
-20
+-10
+10
+-10
+10
 0
 0
 1
@@ -470,7 +575,7 @@ population
 population
 2
 50
-26.0
+40.0
 1
 1
 NIL
@@ -510,16 +615,6 @@ NIL
 NIL
 1
 
-CHOOSER
-10
-146
-148
-191
-foodSpawnPattern
-foodSpawnPattern
-"random" "circular" "rows"
-0
-
 MONITOR
 753
 10
@@ -540,7 +635,7 @@ cycleTime
 cycleTime
 1000
 10000
-3000.0
+2000.0
 1000
 1
 NIL
@@ -555,7 +650,7 @@ mutationChance
 mutationChance
 0
 0.25
-0.25
+0.03
 0.01
 1
 NIL
@@ -567,7 +662,7 @@ MONITOR
 903
 107
 Highest Average Fitness
-highest-avg-fitness
+lowest-avg-fitness
 17
 1
 11
@@ -578,7 +673,7 @@ MONITOR
 907
 168
 Highest Individual Score
-highest-individual-score
+lowest-individual-score
 17
 1
 11
@@ -603,7 +698,7 @@ sheepPop
 sheepPop
 0
 200
-194.0
+10.0
 1
 1
 NIL

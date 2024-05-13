@@ -1,21 +1,31 @@
+; to do: implenment having a population of X and then doign tournaments by picking 3 at a time and save best and make it a parent
+
 breed [dogs dog]
 breed [sheeps sheep]
 
 globals
 [
   currentGeneration
+
   no-agent-actions
   no-agent-states
+  no-agent-views
   chromosome-length
   total-chromosome-length
+
   currentChromosome
   tournamentChromosomes
   tournamentNumber
   tournamentResults
+
   dogPositions
   sheepPositions
+
   score
-  no-agent-views
+  bestScore
+  bestChromosome
+  allScores
+
 ]
 
 dogs-own
@@ -43,7 +53,9 @@ to setup
   clear-all
   reset-ticks
   set currentGeneration 0
+  set bestScore 1000000
   set tournamentResults []
+  set allScores []
   ;;these are defined by the design (agents can move/rotate, and can encounter 4 types of space so 16 states. 4 * 16 * 2 -> 128
   set no-agent-actions 5
   set no-agent-views 4
@@ -59,9 +71,7 @@ to setup
     set tournamentChromosomes fput chromosomeNew tournamentChromosomes
   ]
 
-  let statesBlank n-values total-chromosome-length [randomState]
-
-  set currentChromosome statesBlank
+  set currentChromosome item 0 tournamentChromosomes
 
   set dogPositions get-random-patches dogPop
   set sheepPositions get-random-patches sheepPop
@@ -110,7 +120,7 @@ end
 to-report get-random-patches [n]
   let randomPatches []
   repeat n [
-    let randomPatch patch  (random-between min-pxcor max-pxcor) (random-between min-pycor max-pycor) ; Adjust ranges as needed
+    let randomPatch patch (random-between min-pxcor max-pxcor) (random-between min-pycor max-pycor) ; Adjust ranges as needed
     while [([pcolor] of randomPatch = white)] [
       set randomPatch patch (random-between min-pxcor max-pxcor) (random-between min-pycor max-pycor) ; Adjust ranges as needed
     ]
@@ -120,7 +130,9 @@ to-report get-random-patches [n]
 end
 
 to-report random-between [minval maxval]
-  report minval + random (minval - maxval + 1)
+
+  report minval + random abs ( minval - maxval)
+
 end
 
 to setup-walls
@@ -235,6 +247,8 @@ to tick-dogs
 
     set nextPatch moveDog
 
+;    set nextPatch one-of neighbors4 with [pcolor != white]
+
     if [pcolor = white] of nextPatch [
 
 
@@ -312,7 +326,7 @@ end
 to-report mutate-chromosome [c]
   let j 0
   let stateBlock c
-  while [j < chromosome-length]
+  while [j < total-chromosome-length]
   [
     if mutationChance > random-float 1
     [
@@ -371,11 +385,22 @@ to hatchNextGeneration
   set currentGeneration currentGeneration + 1
   let sortedResults sort-by [[x y] -> item 1 x < item 1 y] tournamentResults
   set score item 1 item 0 sortedResults
+  if score < bestScore [
+    set bestScore score
+    set bestChromosome item 0 item 0 sortedResults
+  ]
+  set allScores lput score allScores
+
+
   set tournamentChromosomes []
   repeat tournamentSize [
     set tournamentChromosomes fput ( crossOver (mutate-chromosome (item 0 item 0 sortedResults)) (item 0 item 1 sortedResults)) tournamentChromosomes
+    ;  set tournamentChromosomes fput (  (mutate-chromosome (item 0 item 0 sortedResults))) tournamentChromosomes]
 
+;    let chromosomeNew n-values total-chromosome-length [randomState]
+;    set tournamentChromosomes fput chromosomeNew tournamentChromosomes
   ]
+
 ;  let sorted-items sort-by [[item1 item2] -> item1 <= item2] (list 4 3 2 1) (list "D" "C" "B" "A")
 
 end
@@ -411,34 +436,52 @@ to-report moveDog
   ][
     set angleToMean towards patch meanX meanY
     set heading angleToMean
-    ifelse count sheeps in-cone distanceFromMean 180 > 1 [
-      set heading angleToMean + 180
-      ifelse count sheeps in-cone 1000 180 > 1[
-        set color pink
-        set sheepCentre 0
+    let sheepsInfront sheeps in-cone distanceFromMean 180
 
-      ][
+    set heading angleToMean + 180
+    let sheepsBehind sheeps in-cone 10000 180
+
+    ifelse (count sheepsInfront > 1) and (count sheepsBehind > 1)[
+      set color pink
+      set sheepCentre 0
+
+
+      ][ifelse (count sheepsInfront > 1) and (count sheepsBehind = 0)[
         set color yellow
         set sheepCentre 1
-      ]
-    ][
-      set color red
-      set heading angleToMean + 180
-      ifelse count sheeps in-cone 1000 180 > 1[
-        set color pink
+
+        ][ifelse (count sheepsInfront = 0) and (count sheepsBehind > 1)[
+
+        set color blue
         set sheepCentre 2
 
-      ][
-        set color yellow
+        ][
+        set color black
         set sheepCentre 3
-      ]
-    ]
+    ]]]
   ]
+  set heading 0
 
   let state item ((sheepCentre * no-agent-states) + currentState) chromosome
 
-  let moveDir (item 0 state)
+  let moveType (item 0 state)
   set currentState (item 1 state)
+
+  if moveType = 0[
+    report patch-here
+  ]
+  if moveType = 1[
+    report move calculate-direction patch-here patch meanX meanY
+  ]
+  let moveDir (calculate-direction patch-here patch meanX meanY) + moveType
+
+  if moveDir > 4 [
+    set moveDir moveDir - 4
+  ]
+
+;  report move calculate-direction patch-here patch meanX meanY
+
+
 
 
   report move movedir
@@ -519,26 +562,26 @@ to-report checkFitness [sheepInput meanXIn meanYIn]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+199
 10
-855
-656
+517
+329
 -1
 -1
-13.0
+10.0
 1
 10
 1
 1
 1
 0
+0
+0
 1
-1
-1
--24
-24
--24
-24
+-15
+15
+-15
+15
 1
 1
 1
@@ -595,13 +638,13 @@ NIL
 HORIZONTAL
 
 SLIDER
-14
+15
 167
-186
+187
 200
 dogPop
 dogPop
-0
+1
 50
 5.0
 1
@@ -618,7 +661,7 @@ cycleTime
 cycleTime
 500
 10000
-1000.0
+10000.0
 500
 1
 NIL
@@ -635,15 +678,15 @@ tournamentSize
 0
 
 SLIDER
-61
-368
-233
-401
+14
+352
+186
+385
 mutationChance
 mutationChance
 0
 0.5
-0.08
+0.03
 0.01
 1
 NIL
@@ -666,6 +709,34 @@ false
 "" ""
 PENS
 "default" 1.0 0 -16777216 true "" "plot score"
+
+MONITOR
+709
+23
+836
+68
+NIL
+currentGeneration
+17
+1
+11
+
+BUTTON
+880
+196
+943
+229
+NIL
+go
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1013,6 +1084,30 @@ NetLogo 6.4.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="experiment" repetitions="50" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <exitCondition>currentGeneration = 20</exitCondition>
+    <metric>bestScore</metric>
+    <metric>bestChromosome</metric>
+    <enumeratedValueSet variable="sheepPop">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="tournamentSize">
+      <value value="3"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dogPop">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="mutationChance">
+      <value value="0.03"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="cycleTime">
+      <value value="1500"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default

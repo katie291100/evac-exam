@@ -1,5 +1,5 @@
 ; to do: implenment having a population of X and then doign tournaments by picking 3 at a time and save best and make it a parent
-
+; maybe make it so that the dogs have a direction and move in that direction and can either turn 90* or move forward/backwards
 
 breed [dogs dog]
 breed [sheeps sheep]
@@ -470,25 +470,26 @@ to-report moveDog
   let moveType (item 0 state)
   set currentState (item 1 state)
 
-  if moveType = 0[
-    report patch-here
-  ]
-  if moveType = 1[
-    report move calculate-direction patch-here patch meanX meanY
-  ]
+  report move moveType
+;  if moveType = 0[
+;    report patch-here
+;  ]
+;  if moveType = 1[
+;    report move calculate-direction patch-here patch meanX meanY
+;  ]
+;
+;  let moveDir (calculate-direction patch-here patch meanX meanY) + moveType
+;
+;  if moveDir > 4 [
+;    set moveDir moveDir - 4
+;  ]
+;
+;;  report move calculate-direction patch-here patch meanX meanY
 
-  let moveDir (calculate-direction patch-here patch meanX meanY) + moveType
-
-  if moveDir > 4 [
-    set moveDir moveDir - 4
-  ]
-
-;  report move calculate-direction patch-here patch meanX meanY
 
 
 
-
-  report move movedir
+;  report move movedir
 end
 
 
@@ -639,7 +640,7 @@ sheepPop
 sheepPop
 0
 100
-50.0
+51.0
 1
 1
 NIL
@@ -669,7 +670,7 @@ cycleTime
 cycleTime
 500
 20000
-4000.0
+7000.0
 500
 1
 NIL

@@ -1,5 +1,6 @@
 ; to do: implenment having a population of X and then doign tournaments by picking 3 at a time and save best and make it a parent
 
+
 breed [dogs dog]
 breed [sheeps sheep]
 
@@ -52,6 +53,7 @@ sheeps-own
 to setup
   clear-all
   reset-ticks
+  random-seed 42
   set currentGeneration 0
   set bestScore 1000000
   set tournamentResults []
@@ -158,7 +160,7 @@ end
 to setup-dogs
   set generation currentGeneration
   set size 1
-  set shape "wolf"
+  set shape "arrow"
   set color black
 
 end
@@ -227,7 +229,7 @@ to tick-sheeps
   ask sheeps
   [
 
-    let surrounding-tiles neighbors4 with [pcolor != white]  ; Adjust the condition as needed
+
 
     set nextPatch moveSheep
 
@@ -266,7 +268,7 @@ to-report moveSheep
   let surrounding-tiles neighbors4 with [pcolor != white] ; Adjust the condition as needed
   let current-tile patch-here
   let no-dogs surrounding-tiles with [count dogs-here = 0]
-  let no-sheep surrounding-tiles with [count sheeps-here = 0]
+  let no-sheep surrounding-tiles with [count sheeps-here = 0 and count dogs-here = 0]
   let currentSheep self
   let with-dogs surrounding-tiles with [count dogs-here > 0]
 
@@ -285,29 +287,26 @@ to-report moveSheep
   ]
 
   ; Move to a patch with no sheep, but which is adjacent to a patch with sheep;
-  if count no-sheep > 0 [
 
-    foreach shuffle sort no-sheep [ x ->
-      let options ([neighbors4] of x) with [count sheeps-here > 0 and self != current-tile]
 
-      if count options > 0[
-        report x
-      ]
-    ]
-
-    foreach shuffle sort no-sheep [ x ->
-      if ([count sheeps-here] of x) < (count sheeps-here) [
-        report x
-      ]
-    ]
-
+  let options no-sheep with [count neighbors4 with [count sheeps-here > 0 and self != current-tile] > 0]
+  if count options > 0[
+    report one-of options
   ]
 
+
+
+  ; Move to an adjacent patch containing fewer sheep than the current patch;
+  set options no-dogs with [(count sheeps-here < (count [sheeps-here] of current-tile))]
+
+  if count options > 0[
+    report one-of options
+  ]
 ;   Make a stochastic choice of action as follows: choose the same action as the last one with 50% probability,
 ;   or choose one of the remaining four actions, each with 12.5% probability. For the first move, assume for all sheep
 ;   that their previous move was to stay put.
 
-  let options (list 0 1 2 3 4 prevMove prevMove prevMove)
+  set options (list 0 1 2 3 4 prevMove prevMove prevMove)
 
   let newMove one-of options
 
@@ -341,7 +340,9 @@ end
 
 to-report crossOver [firstChrom secondChrom]
   let tempSet tournamentChromosomes
-
+  print "crossing over"
+  print firstChrom
+  print secondChrom
 
   while[0.8 > random-float 1]
   [
@@ -358,14 +359,16 @@ to-report crossOver [firstChrom secondChrom]
     let slice2 sublist secondChrom (dogNum * chromosome-length) ((dogNum * chromosome-length) + slicePoint )
     let slice2End sublist secondChrom ((dogNum * chromosome-length) + slicePoint ) total-chromosome-length
 
+    print slice2
 
-    set firstChrom (sentence slice1Start slice1 slice1End)
-    set secondChrom (sentence slice2Start slice2 slice2End)
+
+    set firstChrom (sentence slice1Start slice2 slice1End)
+    set secondChrom (sentence slice2Start slice1 slice2End)
 
     ]
     ;; make a copy of that state block for both agents
     ;; then swap them and make a new list for each agents
-
+  print firstChrom
   report firstChrom
 end
 
@@ -427,7 +430,7 @@ end
 to-report moveDog
   let meanX mean [pxcor] of sheeps
   let meanY mean [pycor] of sheeps
-  let distanceFromMean ([ distance patch meanX meanY ] of patch-here)
+  let distanceFromMean ([ distance patch meanX meanY ] of patch-here) / 2
 
   let angleToMean 0
   ifelse patch-here = patch meanX meanY [
@@ -473,6 +476,7 @@ to-report moveDog
   if moveType = 1[
     report move calculate-direction patch-here patch meanX meanY
   ]
+
   let moveDir (calculate-direction patch-here patch meanX meanY) + moveType
 
   if moveDir > 4 [
@@ -517,20 +521,24 @@ to-report moveNorth
 end
 
 to-report calculate-direction [prevPatch newPatch]
+  if prevPatch = newPatch [
+    report 0
+  ]
 
-  if [pxcor] of prevPatch > ([pxcor] of newPatch) [
-    report 1
+  let directions []
+  if [pycor] of prevPatch < ([pycor] of newPatch) [
+    set directions lput 1 directions
   ]
   if [pxcor] of prevPatch < ([pxcor] of newPatch) [
-    report 2
+    set directions lput 2 directions
   ]
   if [pycor] of prevPatch > ([pycor] of newPatch) [
-    report 3
+    set directions lput 3 directions
   ]
-  if [pycor] of prevPatch < ([pycor] of newPatch) [
-    report 4
+  if [pxcor] of prevPatch > ([pxcor] of newPatch) [
+    set directions lput 4 directions
   ]
-  report 0
+  report one-of directions
 end
 
 
@@ -564,8 +572,8 @@ end
 GRAPHICS-WINDOW
 199
 10
-517
-329
+717
+529
 -1
 -1
 10.0
@@ -578,10 +586,10 @@ GRAPHICS-WINDOW
 0
 0
 1
--15
-15
--15
-15
+-25
+25
+-25
+25
 1
 1
 1
@@ -660,8 +668,8 @@ SLIDER
 cycleTime
 cycleTime
 500
-10000
-10000.0
+20000
+4000.0
 500
 1
 NIL
@@ -722,10 +730,10 @@ currentGeneration
 11
 
 BUTTON
-880
-196
-943
-229
+757
+117
+820
+150
 NIL
 go
 NIL

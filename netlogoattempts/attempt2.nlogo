@@ -18,6 +18,7 @@ globals
   tournamentChromosomes
   tournamentNumber
   tournamentResults
+  tournamentRoundResults
 
   dogPositions
   sheepPositions
@@ -57,6 +58,7 @@ to setup
   set currentGeneration 0
   set bestScore 1000000
   set tournamentResults []
+  set tournamentRoundResults []
   set allScores []
   ;;these are defined by the design (agents can move/rotate, and can encounter 4 types of space so 16 states. 4 * 16 * 2 -> 128
   set no-agent-actions 5
@@ -169,8 +171,16 @@ to go
 
   if ticks < cycleTime
   [
+
     tick-sheeps
     tick-dogs
+    if ticks != 0 and ( ticks mod (int (cycleTime / 3))) = 0[
+      let meanX mean [pxcor] of sheeps
+      let meanY mean [pycor] of sheeps
+      set tournamentRoundResults lput (checkFitness sheeps meanX meanY) tournamentRoundResults
+
+      ask turtles [move-to nextPatch]
+    ]
     ask turtles [move-to nextPatch]
     tick
 
@@ -182,17 +192,16 @@ to go
     ifelse tournamentNumber < tournamentSize[
 
 
-      let meanX mean [pxcor] of sheeps
-      let meanY mean [pycor] of sheeps
+
 ;
 ;
 ;
 ;      print "TOURNAMENT Finishing:"
 ;      print tournamentNumber
 
-
-      set tournamentResults lput (list (currentChromosome) (checkFitness sheeps meanX meanY )) tournamentResults
-
+      print tournamentRoundResults
+      set tournamentResults lput (list (currentChromosome) ((sum tournamentRoundResults) / length tournamentRoundResults )) tournamentResults
+      set tournamentRoundResults []
 ;      print tournamentResults
 
       set currentChromosome item (tournamentNumber) tournamentChromosomes
@@ -215,7 +224,7 @@ to go
         setup-chromosomes
         move-to item number dogPositions
       ]
-
+      set tournamentRoundResults []
       ask sheeps [
         move-to item number sheepPositions
       ]
@@ -277,8 +286,6 @@ to-report moveSheep
     if count no-dogs > 0 [
       report one-of no-dogs
     ]
-
-
   ]
   ; 2. If there is a dog in any of the four adjacent patches (i.e. North, South, East or West of the current one), move,
   ; if possible, to an adjacent patch that does not contain a dog;
@@ -297,7 +304,7 @@ to-report moveSheep
 
 
   ; Move to an adjacent patch containing fewer sheep than the current patch;
-  set options no-dogs with [(count sheeps-here < (count [sheeps-here] of current-tile))]
+  set options no-dogs with [(count sheeps-here < (count [sheeps-here] of current-tile)) and count sheeps-here > 0]
 
   if count options > 0[
     report one-of options
@@ -340,9 +347,7 @@ end
 
 to-report crossOver [firstChrom secondChrom]
   let tempSet tournamentChromosomes
-  print "crossing over"
-  print firstChrom
-  print secondChrom
+
 
   while[0.8 > random-float 1]
   [
@@ -359,7 +364,7 @@ to-report crossOver [firstChrom secondChrom]
     let slice2 sublist secondChrom (dogNum * chromosome-length) ((dogNum * chromosome-length) + slicePoint )
     let slice2End sublist secondChrom ((dogNum * chromosome-length) + slicePoint ) total-chromosome-length
 
-    print slice2
+
 
 
     set firstChrom (sentence slice1Start slice2 slice1End)
@@ -368,7 +373,7 @@ to-report crossOver [firstChrom secondChrom]
     ]
     ;; make a copy of that state block for both agents
     ;; then swap them and make a new list for each agents
-  print firstChrom
+
   report firstChrom
 end
 
@@ -571,10 +576,10 @@ to-report checkFitness [sheepInput meanXIn meanYIn]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-199
-10
-717
-529
+228
+26
+746
+545
 -1
 -1
 10.0
@@ -591,8 +596,8 @@ GRAPHICS-WINDOW
 25
 -25
 25
-1
-1
+0
+0
 1
 ticks
 30.0
@@ -670,7 +675,7 @@ cycleTime
 cycleTime
 500
 20000
-7000.0
+6500.0
 500
 1
 NIL
@@ -695,7 +700,7 @@ mutationChance
 mutationChance
 0
 0.5
-0.03
+0.01
 0.01
 1
 NIL
@@ -720,9 +725,9 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot score"
 
 MONITOR
-709
+757
 23
-836
+884
 68
 NIL
 currentGeneration
@@ -731,10 +736,10 @@ currentGeneration
 11
 
 BUTTON
-757
+759
+84
+822
 117
-820
-150
 NIL
 go
 NIL

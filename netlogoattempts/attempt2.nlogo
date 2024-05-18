@@ -1,5 +1,7 @@
 ; to do: implenment having a population of X and then doign tournaments by picking 3 at a time and save best and make it a parent
 ; maybe make it so that the dogs have a direction and move in that direction and can either turn 90* or move forward/backwards
+; add elitism so that the best one is used in the next generation without any changes
+
 
 breed [dogs dog]
 breed [sheeps sheep]
@@ -9,7 +11,6 @@ globals
   currentGeneration
 
   no-agent-actions
-  no-agent-states
   no-agent-views
   chromosome-length
   total-chromosome-length
@@ -36,10 +37,9 @@ dogs-own
            ;; one of 5 actions (encoded from 0 to 4)
            ;; one of 16 states to change to (encoded from 0 to 15)
            ;; In total a chromosome contains 128 numbers to encode agent behaviour
-  generation ;; what generation they are from
   nextPatch
   currentState ;; what is the current state they are in
-  sheepCentre
+  currentView
   number
 ]
 
@@ -63,7 +63,7 @@ to setup
   ;;these are defined by the design (agents can move/rotate, and can encounter 4 types of space so 16 states. 4 * 16 * 2 -> 128
   set no-agent-actions 5
   set no-agent-views 4
-  set no-agent-states 16
+
   set chromosome-length (no-agent-views * no-agent-states)
   set total-chromosome-length chromosome-length * dogPop
   ask patches [set pcolor green]
@@ -160,7 +160,6 @@ to setup-sheep
 end
 
 to setup-dogs
-  set generation currentGeneration
   set size 1
   set shape "arrow"
   set color black
@@ -374,7 +373,7 @@ to-report crossOver [firstChrom secondChrom]
     ;; make a copy of that state block for both agents
     ;; then swap them and make a new list for each agents
 
-  report firstChrom
+  report one-of list firstChrom secondChrom
 end
 
 
@@ -400,13 +399,14 @@ to hatchNextGeneration
   set allScores lput score allScores
 
 
-  set tournamentChromosomes []
-  repeat tournamentSize [
-    set tournamentChromosomes fput ( crossOver (mutate-chromosome (item 0 item 0 sortedResults)) (item 0 item 1 sortedResults)) tournamentChromosomes
+
+  set tournamentChromosomes (list item 0 item 0 sortedResults)
+  repeat tournamentSize - 1 [
+;    set tournamentChromosomes fput ( crossOver (mutate-chromosome (item 0 item 0 sortedResults)) (item 0 item 1 sortedResults)) tournamentChromosomes
     ;  set tournamentChromosomes fput (  (mutate-chromosome (item 0 item 0 sortedResults))) tournamentChromosomes]
 
-;    let chromosomeNew n-values total-chromosome-length [randomState]
-;    set tournamentChromosomes fput chromosomeNew tournamentChromosomes
+    let chromosomeNew n-values total-chromosome-length [randomState]
+    set tournamentChromosomes fput chromosomeNew tournamentChromosomes
   ]
 
 ;  let sorted-items sort-by [[item1 item2] -> item1 <= item2] (list 4 3 2 1) (list "D" "C" "B" "A")
@@ -439,7 +439,7 @@ to-report moveDog
 
   let angleToMean 0
   ifelse patch-here = patch meanX meanY [
-    set sheepCentre 0
+    set currentView 0
     set heading 0
   ][
     set angleToMean towards patch meanX meanY
@@ -447,30 +447,30 @@ to-report moveDog
     let sheepsInfront sheeps in-cone distanceFromMean 180
 
     set heading angleToMean + 180
-    let sheepsBehind sheeps in-cone 10000 180
+    let sheepsBehind sheeps in-cone 24 180
 
     ifelse (count sheepsInfront > 1) and (count sheepsBehind > 1)[
       set color pink
-      set sheepCentre 0
+      set currentView 0
 
 
       ][ifelse (count sheepsInfront > 1) and (count sheepsBehind = 0)[
         set color yellow
-        set sheepCentre 1
+        set currentView 1
 
         ][ifelse (count sheepsInfront = 0) and (count sheepsBehind > 1)[
 
         set color blue
-        set sheepCentre 2
+        set currentView 2
 
         ][
         set color black
-        set sheepCentre 3
+        set currentView 3
     ]]]
   ]
   set heading 0
 
-  let state item ((sheepCentre * no-agent-states) + currentState) chromosome
+  let state item ((currentView * no-agent-states) + currentState) chromosome
 
   let moveType (item 0 state)
   set currentState (item 1 state)
@@ -589,8 +589,8 @@ GRAPHICS-WINDOW
 1
 1
 0
-0
-0
+1
+1
 1
 -25
 25
@@ -645,7 +645,7 @@ sheepPop
 sheepPop
 0
 100
-51.0
+50.0
 1
 1
 NIL
@@ -675,7 +675,7 @@ cycleTime
 cycleTime
 500
 20000
-6500.0
+5500.0
 500
 1
 NIL
@@ -752,10 +752,51 @@ NIL
 NIL
 1
 
-@#$#@#$#@
-## WHAT IS IT?
+TEXTBOX
+348
+10
+768
+78
+Project should be run with Netlogo 6.4
+14
+0.0
+1
 
-(a general understanding of what the model is trying to show or explain)
+SLIDER
+877
+205
+1049
+238
+no-agent-states
+no-agent-states
+0
+50
+16.0
+2
+1
+NIL
+HORIZONTAL
+
+@#$#@#$#@
+This project was written in NetLogo 6.4
+
+## Representation of dogs’ behaviour [5 marks]
+
+In this model, dogs are grouped into sets of 5 and a simulation is run of the 5 dogs at a time. 
+Each dog has a `currentView`. This represents what is between them and then middle of the pack of sheep (calculated by finding the mean X and mean Y values of the sheep): 
+- 0 - Sheep both between the dog and the centre, and also on the opposite side of the dog
+- 1 - Sheep between the dog and the centre only
+- 2 - No sheep between dog and the centre but there is on the other side. 
+- 3 - No sheep infront of or Behind the sheep 
+
+The dog also has a `CurrentState`, this is a number between 0 and 16. 
+
+The initial state that a dog is in is random. After the intiial set up it is chosen by the Chromosome. 
+
+The dogs each have a chromosome, each allele is a tuple, containing 2 numbers. The first value in it is the next move that the dog should make. This is represented by a value from 0-5. The second value is the next state that it should move to, which is then set as the `currentState`. 
+The allele in the chromosome that is referenced in order to find the dogs next move is found by the `currentState` of the dog and the `currentView` as explained earlier. 
+
+
 
 ## HOW IT WORKS
 

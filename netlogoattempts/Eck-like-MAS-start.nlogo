@@ -15,6 +15,7 @@ globals
   chromosome-length
   count-sheep-all
   count-notsheep
+  score
 ]
 
 sheeps-own
@@ -152,6 +153,7 @@ to endOfCycle
   let sumFitness 0
   ask dogs [set points checkFitness influencedSheep meanX meanY]
   ask dogs [set sumFitness (sumFitness + points  )]
+  set score checkFitness sheeps meanX meanY
   set averageFitness (sumFitness / population)
   print "Average Fitness: "
   print averageFitness
@@ -213,6 +215,15 @@ to hatchNextGeneration
   create-sheeps sheepPop [setup-sheep]
 
   crossOver
+end
+
+to-report checkIsWhite [i]
+  if i = 1 [report ([pcolor] of moveNorth = white)]
+  if i = 2 [report ([pcolor] of moveEast = white)]
+  if i = 3 [report ([pcolor] of moveSouth = white)]
+  if i = 4 [report ([pcolor] of moveWest = white)]
+  if i = 0 [report [pcolor] of patch-here = white]
+
 end
 
 to mutate-chromosomes
@@ -316,18 +327,24 @@ to-report moveSheep
   let current-tile patch-here
   let no-dogs surrounding-tiles with [count dogs-here = 0]
   let no-sheep surrounding-tiles with [count sheeps-here = 0]
-
+  let currentSheep self
+  let with-dogs surrounding-tiles with [count dogs-here > 0]
+  if count with-dogs > 0[
+    ask with-dogs [ask dogs-here [set influencedSheep sentence influencedSheep currentSheep]]
+  ]
   ; 1. If there is a dog in your current patch, move, if possible, to a patch without a dog;
-  if count dogs-here > 0 [
+  ifelse count dogs-here > 0 [
     if count no-dogs > 0 [
       report one-of no-dogs
     ]
-  ]
+
+
+  ][
   ; 2. If there is a dog in any of the four adjacent patches (i.e. North, South, East or West of the current one), move,
   ; if possible, to an adjacent patch that does not contain a dog;
-  if count no-dogs > 0 [
-    report one-of no-dogs
-  ]
+  if count with-dogs > 0 and count no-dogs > 0 [
+    report  one-of no-dogs
+  ]]
 
   ; Move to a patch with no sheep, but which is adjacent to a patch with sheep;
   if count no-sheep > 0 [
@@ -347,6 +364,7 @@ to-report moveSheep
     ]
 
   ]
+
 
 ;   Make a stochastic choice of action as follows: choose the same action as the last one with 50% probability,
 ;   or choose one of the remaining four actions, each with 12.5% probability. For the first move, assume for all sheep
@@ -391,10 +409,12 @@ to randomMove
 end
 
 to move [i]
-  if i = 1 [moveNorth]
-  if i = 2 [moveEast]
-  if i = 3 [moveSouth]
-  if i = 4 [moveWest]
+  if checkIsWhite i = false [
+  if i = 1 [move-to moveNorth]
+  if i = 2 [move-to moveEast]
+  if i = 3 [move-to moveSouth]
+  if i = 4 [move-to moveWest]
+  ]
 end
 
 to tick-dogs
@@ -474,6 +494,9 @@ to action
 
 end
 
+
+
+
 to-report look-here
 
   ifelse count dogs-here > 0 [report 1]
@@ -484,32 +507,32 @@ to-report look-here
   ]]]]
  end
 
-to moveEast
-  if ([pcolor] of patch (xcor + 1) ycor) != white [
-    set xcor xcor + 1
+to-report moveEast
+
     set heading 90
-  ]
+    report patch (xcor + 1) ycor
+
 end
 
-to moveWest
-  if ([pcolor] of patch (xcor - 1) ycor) != white [
-    set xcor xcor - 1
-    set heading 270
-  ]
+to-report moveWest
+
+  set heading 270
+  report patch (xcor - 1) ycor
+
 end
 
-to moveSouth
-  if ([pcolor] of patch xcor (ycor - 1)) != white [
-    set ycor ycor - 1
+to-report moveSouth
+
     set heading 180
-  ]
+    report patch xcor (ycor - 1)
+
 end
 
-to moveNorth
-  if ([pcolor] of patch xcor (ycor + 1)) != white [
-    set ycor ycor + 1
-    set heading 0
-  ]
+to-report moveNorth
+
+  set heading 0
+  report patch xcor (ycor + 1)
+
 end
 
 to-report checkFitness [sheepInput meanXIn meanYIn]
@@ -542,8 +565,8 @@ end
 GRAPHICS-WINDOW
 203
 10
-484
-292
+874
+682
 -1
 -1
 13.0
@@ -556,10 +579,10 @@ GRAPHICS-WINDOW
 0
 0
 1
--10
-10
--10
-10
+-25
+25
+-25
+25
 0
 0
 1
@@ -575,7 +598,7 @@ population
 population
 2
 50
-40.0
+5.0
 1
 1
 NIL
@@ -698,11 +721,29 @@ sheepPop
 sheepPop
 0
 200
-10.0
+48.0
 1
 1
 NIL
 HORIZONTAL
+
+PLOT
+5
+439
+205
+589
+plot 1
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot score"
 
 @#$#@#$#@
 ## WHAT IS IT?
